@@ -3,11 +3,11 @@
 $playlists = [
     [
         "url" => "https://raw.githubusercontent.com/abusaeeidx/Toffee-playlist/refs/heads/main/ott_navigator.m3u",
-        "type" => "toffee"
+        "filterBanglaCategory" => true
     ],
     [
         "url" => "https://raw.githubusercontent.com/incognitobrothers/AynaOTT-Auto-Update-Playlist/refs/heads/main/ayna_live.m3u",
-        "type" => "ayna"
+        "filterBanglaCategory" => false
     ]
 ];
 
@@ -16,13 +16,25 @@ $seen = [];
 
 foreach ($playlists as $playlist) {
 
-    $data = @file_get_contents($playlist["url"]);
-    if (!$data) continue;
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $playlist["url"],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_USERAGENT => "Mozilla/5.0"
+    ]);
 
-    $lines = preg_split("/\r\n|\n|\r/", $data);
-    $total = count($lines);
+    $data = curl_exec($ch);
+    curl_close($ch);
 
-    for ($i = 0; $i < $total; $i++) {
+    if (!$data) {
+        continue;
+    }
+
+    $lines = preg_split("/\r\n|\n|\r/", trim($data));
+
+    for ($i = 0; $i < count($lines); $i++) {
 
         if (strpos($lines[$i], "#EXTINF") !== 0) {
             continue;
@@ -32,29 +44,28 @@ foreach ($playlists as $playlist) {
         $extinf = $lines[$i];
         $entry[] = $extinf;
 
-        // Channel Name
-        $parts = explode(",", $extinf, 2);
-        $channelName = strtolower(trim(end($parts)));
-
-        // Remove Bangla category from Toffee playlist
+        // Remove only "বাংলাদেশি চ্যানেল" category from Toffee playlist
         if (
-            $playlist["type"] == "toffee" &&
-            preg_match('/group-title="[^"]*bangla[^"]*"/i', $extinf)
+            $playlist["filterBanglaCategory"] &&
+            preg_match('/group-title\s*=\s*"[^"]*বাংলাদেশি চ্যানেল[^"]*"/ui', $extinf)
         ) {
-            while (++$i < $total) {
-                if (strpos($lines[$i], "#EXTINF") === 0) {
-                    $i--;
+            while (++$i < count($lines)) {
+                if (preg_match('/^(https?|rtmp|rtsp|udp):/i', trim($lines[$i]))) {
                     break;
                 }
             }
             continue;
         }
 
+        // Channel name
+        $parts = explode(",", $extinf, 2);
+        $channelName = strtolower(trim(end($parts)));
+
         // Skip duplicate only from Ayna playlist
-        if ($playlist["type"] == "ayna" && isset($seen[$channelName])) {
-            while (++$i < $total) {
-                if (strpos($lines[$i], "#EXTINF") === 0) {
-                    $i--;
+        if (!$playlist["filterBanglaCategory"] && isset($seen[$channelName])) {
+
+            while (++$i < count($lines)) {
+                if (preg_match('/^(https?|rtmp|rtsp|udp):/i', trim($lines[$i]))) {
                     break;
                 }
             }
@@ -63,21 +74,23 @@ foreach ($playlists as $playlist) {
 
         $seen[$channelName] = true;
 
-        // Copy all lines until next channel
-        while (++$i < $total) {
-            if (strpos($lines[$i], "#EXTINF") === 0) {
-                $i--;
+        // Copy metadata + stream URL
+        while (++$i < count($lines)) {
+
+            $line = trim($lines[$i]);
+            $entry[] = $line;
+
+            if (preg_match('/^(https?|rtmp|rtsp|udp):/i', $line)) {
                 break;
             }
-            $entry[] = $lines[$i];
         }
 
         $output[] = implode("\n", $entry);
     }
 }
 
-header("Content-Type: audio/x-mpegurl");
-echo "#EXTM3U\n";
-echo implode("\n", $output);
+header("Content-Type: audio/x-mpegurl; charset=UTF-8");
+echo "#EXTM3U\n\n";
+echo implode("\n\n", $output);
 
 ?>
