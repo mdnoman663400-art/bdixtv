@@ -16,37 +16,32 @@ $seen = [];
 
 foreach ($playlists as $playlist) {
 
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL => $playlist["url"],
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_USERAGENT => "Mozilla/5.0"
-    ]);
-
-    $data = curl_exec($ch);
-    curl_close($ch);
-
+    $data = @file_get_contents($playlist["url"]);
     if (!$data) continue;
 
     $lines = preg_split("/\r\n|\n|\r/", $data);
-    $count = count($lines);
+    $total = count($lines);
 
-    for ($i = 0; $i < $count; $i++) {
+    for ($i = 0; $i < $total; $i++) {
 
         if (strpos($lines[$i], "#EXTINF") !== 0) {
             continue;
         }
 
+        $entry = [];
         $extinf = $lines[$i];
+        $entry[] = $extinf;
 
-        // Remove News & Bangladeshi categories only from Toffee playlist
+        // Channel Name
+        $parts = explode(",", $extinf, 2);
+        $channelName = strtolower(trim(end($parts)));
+
+        // Remove Bangla category from Toffee playlist
         if (
             $playlist["type"] == "toffee" &&
-            preg_match('/group-title="[^"]*(news|bangladesh|bangladeshi)[^"]*"/i', $extinf)
+            preg_match('/group-title="[^"]*bangla[^"]*"/i', $extinf)
         ) {
-            while (++$i < $count) {
+            while (++$i < $total) {
                 if (strpos($lines[$i], "#EXTINF") === 0) {
                     $i--;
                     break;
@@ -55,12 +50,9 @@ foreach ($playlists as $playlist) {
             continue;
         }
 
-        $parts = explode(",", $extinf, 2);
-        $channelName = strtolower(trim(end($parts)));
-
         // Skip duplicate only from Ayna playlist
         if ($playlist["type"] == "ayna" && isset($seen[$channelName])) {
-            while (++$i < $count) {
+            while (++$i < $total) {
                 if (strpos($lines[$i], "#EXTINF") === 0) {
                     $i--;
                     break;
@@ -71,22 +63,20 @@ foreach ($playlists as $playlist) {
 
         $seen[$channelName] = true;
 
-        $output[] = $extinf;
-
-        // Copy all metadata lines + stream URL
-        while (++$i < $count) {
-
+        // Copy all lines until next channel
+        while (++$i < $total) {
             if (strpos($lines[$i], "#EXTINF") === 0) {
                 $i--;
                 break;
             }
-
-            $output[] = $lines[$i];
+            $entry[] = $lines[$i];
         }
+
+        $output[] = implode("\n", $entry);
     }
 }
 
-header("Content-Type: audio/x-mpegurl; charset=UTF-8");
+header("Content-Type: audio/x-mpegurl");
 echo "#EXTM3U\n";
 echo implode("\n", $output);
 
