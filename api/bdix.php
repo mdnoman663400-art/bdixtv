@@ -2,17 +2,17 @@
 
 $playlists = [
     [
-        "url" => "https://raw.githubusercontent.com/incognitobrothers/AynaOTT-Auto-Update-Playlist/refs/heads/main/ayna_live.m3u",
-        "removeNews" => false
-    ],
-    [
         "url" => "https://raw.githubusercontent.com/abusaeeidx/Toffee-playlist/refs/heads/main/ott_navigator.m3u",
         "removeNews" => true
+    ],
+    [
+        "url" => "https://raw.githubusercontent.com/incognitobrothers/AynaOTT-Auto-Update-Playlist/refs/heads/main/ayna_live.m3u",
+        "removeNews" => false
     ]
 ];
 
-$seen = [];
 $output = [];
+$seen = [];
 
 foreach ($playlists as $playlist) {
 
@@ -32,12 +32,14 @@ foreach ($playlists as $playlist) {
 
     for ($i = 0; $i < count($lines); $i++) {
 
-        if (strpos($lines[$i], "#EXTINF") !== 0) continue;
+        if (strpos($lines[$i], "#EXTINF") !== 0) {
+            continue;
+        }
 
         $extinf = $lines[$i];
         $stream = trim($lines[$i + 1] ?? "");
 
-        // Remove News channels only from ott_navigator.m3u
+        // Remove only News channels from Toffee playlist
         if ($playlist["removeNews"] &&
             preg_match('/group-title="[^"]*news[^"]*"/i', $extinf)) {
             $i++;
@@ -47,10 +49,18 @@ foreach ($playlists as $playlist) {
         $parts = explode(",", $extinf, 2);
         $name = strtolower(trim(end($parts)));
 
-        if (!isset($seen[$name])) {
+        if ($playlist["removeNews"]) {
+            // Toffee playlist: always keep (except News)
             $seen[$name] = true;
             $output[] = $extinf;
             $output[] = $stream;
+        } else {
+            // Ayna playlist: skip only duplicates
+            if (!isset($seen[$name])) {
+                $seen[$name] = true;
+                $output[] = $extinf;
+                $output[] = $stream;
+            }
         }
 
         $i++;
@@ -60,3 +70,4 @@ foreach ($playlists as $playlist) {
 header("Content-Type: audio/x-mpegurl");
 echo "#EXTM3U\n";
 echo implode("\n", $output);
+?>
