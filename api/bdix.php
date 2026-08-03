@@ -3,56 +3,84 @@
 $playlists = [
     [
         "url" => "https://raw.githubusercontent.com/abusaeeidx/Toffee-playlist/refs/heads/main/ott_navigator.m3u",
-        "removeNews" => true
+        "type" => "toffee"
     ],
     [
         "url" => "https://raw.githubusercontent.com/incognitobrothers/AynaOTT-Auto-Update-Playlist/refs/heads/main/ayna_live.m3u",
-        "removeNews" => false
+        "type" => "ayna"
     ]
 ];
 
-$seen = [];
 $output = [];
+$seen = [];
 
 foreach ($playlists as $playlist) {
 
-    $data = file_get_contents($playlist["url"]);
+    $data = @file_get_contents($playlist["url"]);
     if (!$data) continue;
 
-    $entries = preg_split('/(?=#EXTINF)/', $data);
+    $lines = preg_split("/\r\n|\n|\r/", $data);
+    $total = count($lines);
 
-    foreach ($entries as $entry) {
+    for ($i = 0; $i < $total; $i++) {
 
-        $entry = trim($entry);
-        if ($entry == '') continue;
-
-        $lines = explode("\n", str_replace("\r", "", $entry));
-        $extinf = trim($lines[0]);
-
-        if (strpos($extinf, "#EXTINF") !== 0) continue;
-
-        // Remove News category only from Toffee playlist
-        if (
-            $playlist["removeNews"] &&
-            preg_match('/group-title="[^"]*news[^"]*"/i', $extinf)
-        ) {
+        if (strpos($lines[$i], "#EXTINF") !== 0) {
             continue;
         }
+
+        $entry = [];
+        $entry[] = $lines[$i];
+        $extinf = $lines[$i];
 
         // Channel Name
         $parts = explode(",", $extinf, 2);
-        $name = strtolower(trim(end($parts)));
+        $channelName = strtolower(trim(end($parts)));
 
-        // Skip duplicate only from Ayna
-        if (!$playlist["removeNews"] && isset($seen[$name])) {
+        // Remove only Toffee News channels
+        if (
+            $playlist["type"] == "toffee" &&
+            preg_match('/group-title="[^"]*news[^"]*"/i', $extinf)
+        ) {
+            while (++$i < $total) {
+                if (strpos($lines[$i], "#EXTINF") === 0) {
+                    $i--;
+                    break;
+                }
+            }
             continue;
         }
 
-        $seen[$name] = true;
-        $output[] = $entry;
+        // Remove duplicate only from Ayna
+        if ($playlist["type"] == "ayna" && isset($seen[$channelName])) {
+
+            while (++$i < $total) {
+                if (strpos($lines[$i], "#EXTINF") === 0) {
+                    $i--;
+                    break;
+                }
+            }
+            continue;
+        }
+
+        $seen[$channelName] = true;
+
+        // Copy complete entry
+        while (++$i < $total) {
+
+            if (strpos($lines[$i], "#EXTINF") === 0) {
+                $i--;
+                break;
+            }
+
+            $entry[] = $lines[$i];
+        }
+
+        $output[] = implode("\n", $entry);
     }
 }
 
 header("Content-Type: audio/x-mpegurl");
-echo "#EXTM3U\n\n";
-echo implode("\n\n", $output);
+echo "#EXTM3U\n";
+echo implode("\n", $output);
+
+?>
