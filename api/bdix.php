@@ -6,7 +6,7 @@ $playlists = [
         "filterBanglaCategory" => true
     ],
     [
-        "url" => "https://raw.githubusercontent.com/incognitobrothers/AynaOTT-Auto-Update-Playlist/refs/heads/main/ayna_live.m3u",
+        "url" => "https://raw.githubusercontent.com/sm-monirulislam/AynaOTT-auto-update-playlist/refs/heads/main/AynaOTT.m3u",
         "filterBanglaCategory" => false
     ]
 ];
